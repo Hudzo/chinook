@@ -1,6 +1,9 @@
 if (!process.env.PORT)
   process.env.PORT = 8080;
 
+//global variable for number of albums per page
+var perPage = 20;
+
 /* initialization of Chinook database */
 var sqlite3 = require('sqlite3').verbose();
 var db = new sqlite3.Database('chinook.sl3');
@@ -9,7 +12,7 @@ var db = new sqlite3.Database('chinook.sl3');
 var artists = function(page, artist, details, callback) {
   db.all("SELECT Artist.ArtistId, Name, StarsNo " +
     "FROM Artist, Stars WHERE Artist.ArtistId = Stars.ArtistId " +
-    "ORDER BY Name LIMIT 33 OFFSET ($page - 1) * 33",
+    "ORDER BY Name LIMIT "+perPage+" OFFSET ($page - 1) * "+perPage,
     {$page: page}, function(error, rows) {
       if (error) {
         console.log(error);
@@ -18,7 +21,7 @@ var artists = function(page, artist, details, callback) {
         var result = '<div id="artists">';
         for (var i = 0; i < rows.length; i++) {
           var selected = rows[i].ArtistId == artist;
-          result += '<div id="' + rows[i].ArtistId + '"><span class="numbers">' + (page * 33 + i - 32) + '.</span>' +
+          result += '<div id="' + rows[i].ArtistId + '"><span class="numbers">' + (page * perPage + i - (perPage-1)) + '.</span>' +
             '<a href="/artists/' + page + (!selected? '/details/' + rows[i].ArtistId: '') + '#' + rows[i].ArtistId + '">' +
             '<button type="button" class="btn btn-default' + (selected? ' selected': '') + '">' +
             rows[i].Name + '</button></a><span class="stars">';
@@ -85,7 +88,7 @@ var playlists = function(artist, callback) {
 
 /* calls callback with specified artist's genres */
 var genres = function(artist, callback) {
-  db.all("SELECT DISTINCT Genre.Name FROM Genre, Track, Album " +
+  db.all("SELECT DISTINCT Genre.Name AS ime FROM Genre, Track, Album " +
     "WHERE Genre.GenreId = Track.GenreId AND Track.AlbumId = Album.AlbumId " +
     "AND ArtistId = $artist ORDER BY Genre.Name",
     {$artist: artist}, function(error, rows) {
@@ -93,10 +96,21 @@ var genres = function(artist, callback) {
         console.log(error);
         callback('<strong>Something went wrong!</strong>');
       } else {
-        var result = '<h5>Genres</h5><div id="genres">' + 
-          'No genres for this artist' + 
-          '</div>';
-        callback(result);
+        var result = '<h5>Genres</h5><div id="genres">';
+        if (rows.length == 0)
+          result += 'No genres for this Artist';
+        else
+          var stevc=0;
+          rows.forEach(function (row) {
+            if(stevc==0){
+              result += row.ime;
+            }
+            else{
+            result += ' | ' + row.ime;
+            }
+            stevc++;
+          });
+        callback(result + '</div>');
       }
   });
 }
@@ -105,12 +119,21 @@ var genres = function(artist, callback) {
 var express = require('express');
 var app = express();
 
+app.listen(process.env.PORT, function() {
+  console.log("Strežnik posluša na portu " + process.env.PORT + ".");
+});
+
 /* settings for static application files */
 app.use(express.static('public'));
 app.set('view engine', 'ejs');
 
 /* responds with first page's artists */
 app.get('/artists', function(request, response) {
+  response.redirect('/artists/1');
+});
+
+//respond with first page
+app.get('/', function(request, response) {
   response.redirect('/artists/1');
 });
 
@@ -187,7 +210,7 @@ app.get('/pages', function(request, response) {
       console.log(error);
       response.sendStatus(500);
     } else
-      response.send({pages: Math.ceil(row.Artists / 33)});
+      response.send({pages: Math.ceil(row.Artists / perPage)});
   });
 });
 
